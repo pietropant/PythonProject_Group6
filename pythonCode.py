@@ -17,7 +17,7 @@ from statsmodels.stats.multitest import multipletests
 from itertools import combinations
 from pandas import ExcelWriter
 
-filepath = '/Users/pietropante/Desktop/Files4Python/dataset_project_eHealth20242025.csv'
+filepath = '/Users/pietropante/Desktop/Python_assignment/Files4Python/dataset_project_eHealth20242025.csv'
 df = pd.read_csv(filepath)
 categorical_columns = ['gender', 'marital', 'education']
 for col in df.columns:
@@ -26,7 +26,7 @@ for col in df.columns:
         df[col] = df[col].astype('object')
     else:
         df[col] = df[col].astype('float64')
-#print(df.info())
+# print(df.info())
 
 total_missing = df.isnull().sum().sum()
 rows_with_missing = df.isnull().any(axis=1).sum()
@@ -40,22 +40,28 @@ print(numerical.shape)
 print("Numerical columns:\n", numerical.columns.tolist())
 print("Categorical columns :\n", categorical.columns.tolist())
 
-knn_imputer = KNNImputer(n_neighbors=5)  # Considering 160 istanze METTIAMO 5 PERCHè LA LETTERATURA NON SI PRONUNCIA RELATIVAMENTE
+# The use of KNN is probably the most sensible choice for several reasons. The main one is that
+# KNN leverages the correlation present in the dataset, considering how other
+# values (particularly those of correlated variables) influence the values to be imputed
+knn_imputer = KNNImputer(
+    n_neighbors=5)  # With 160 instances, set 5 as the value since the literature offers no clear guidance
 numerical_imputed = np.round(
-    knn_imputer.fit_transform(numerical))  # round all'intero più vicino per questione di sensatezza negli imputati
+    knn_imputer.fit_transform(
+        numerical))  # Round to the nearest integer for the sake of reasonableness in the imputed values
 numerical = pd.DataFrame(numerical_imputed, columns=numerical.columns)
 
 for col in categorical.columns:
     mode_value = categorical[col].mode()[0]
     categorical[col] = categorical[col].fillna(mode_value)
-    categorical[col] = categorical[col].astype('object')  # Pandas cerca di mantenere il tipo più
-    # "adatto" possibile per i dati. Se la colonna contiene principalmente stringhe e la moda è
-    # una stringa, non ci sono problemi. Tuttavia, se la colonna contiene valori numerici e la
-    # moda è numerica, pandas potrebbe inferire che il tipo di dato migliore per quella colonna
-    # è numerico (ad esempio, int64 o float64)
+    categorical[col] = categorical[col].astype(
+        'object')  # Pandas tries to maintain the most "suitable" data type. If the column
+    # mostly contains strings and the mode is a string, no issue arises. However, if the column has numeric values and the
+    # mode is numeric, pandas may infer the best data type. In this way, we constrained this behaviour.
+
 df = pd.concat([numerical, categorical], axis=1)
 
-# per la sensatezza nelle imputazioni
+# For the data's consistency, imputations must be integers given the numerical columns in the dataset.
+# Therefore, we perform this check to ensure they have been correctly rounded to the nearest integer.
 numerical_columns = df.select_dtypes(include=['float64', 'int64']).columns
 non_integers_info = []
 for col in numerical_columns:
@@ -67,7 +73,7 @@ if non_integers_info:
     for col, idx, value in non_integers_info:
         print(f"Column: {col}, Row: {idx}, Value: {value}")
 else:
-    print("No non-integer values found.")#perche nelle imputazioni numeriche si fa il knn rounded!!!
+    print("No non-integer values found.")
 
 print("\nDataFrame after imputation:")
 print(df.info())
@@ -78,11 +84,16 @@ print(f"Number of rows containing at least one missing value after MV filling us
 df = df.drop_duplicates()
 print("Shape after removing duplicate rows:", df.shape)
 
+# Calculates composite scores based on specific sets of columns related to different assessments.
+# It calculates scores for PHQ9, GAD7, ASQ, ASRS, and SSBA (alcohol, internet, drug, and gambling) based on predefined rules from literature.
+# After calculating the scores, it drops the individual assessment columns from the dataframe to keep only the final scores.
+#PHQ
 df['phq9_score'] = df[['phq_1', 'phq_2', 'phq_3', 'phq_4', 'phq_5', 'phq_6', 'phq_7', 'phq_8', 'phq_9']].sum(axis=1)
 df = df.drop(columns=['phq_1', 'phq_2', 'phq_3', 'phq_4', 'phq_5', 'phq_6', 'phq_7', 'phq_8', 'phq_9'])
+#GAD
 df['gad7_score'] = df[['gad_1', 'gad_2', 'gad_3', 'gad_4', 'gad_5', 'gad_6', 'gad_7']].sum(axis=1)
 df = df.drop(columns=['gad_1', 'gad_2', 'gad_3', 'gad_4', 'gad_5', 'gad_6', 'gad_7'])
-
+#ASQ
 rule_1_columns = ['asq_1', 'asq_2', 'asq_4', 'asq_5', 'asq_6', 'asq_7', 'asq_9', 'asq_12',
                   'asq_13', 'asq_16', 'asq_18', 'asq_19', 'asq_20', 'asq_21', 'asq_22', 'asq_23',
                   'asq_26', 'asq_33', 'asq_35', 'asq_39', 'asq_41', 'asq_42', 'asq_43', 'asq_45',
@@ -90,7 +101,6 @@ rule_1_columns = ['asq_1', 'asq_2', 'asq_4', 'asq_5', 'asq_6', 'asq_7', 'asq_9',
 rule_2_columns = ['asq_3', 'asq_8', 'asq_10', 'asq_11', 'asq_14', 'asq_15', 'asq_17', 'asq_24',
                   'asq_25', 'asq_27', 'asq_28', 'asq_29', 'asq_30', 'asq_31', 'asq_32', 'asq_34',
                   'asq_36', 'asq_37', 'asq_38', 'asq_40', 'asq_44', 'asq_47', 'asq_48', 'asq_49', 'asq_50']
-
 def calculate_score(row):
     score = 0
     for col in rule_1_columns:
@@ -100,7 +110,6 @@ def calculate_score(row):
         if row[col] in [0, 1]:
             score += 1
     return score
-
 df['asq_score'] = df.apply(calculate_score, axis=1)
 df = df.drop(columns=['asq_1', 'asq_2', 'asq_3', 'asq_4', 'asq_5', 'asq_6', 'asq_7', 'asq_8', 'asq_9', 'asq_10',
                       'asq_11', 'asq_12', 'asq_13', 'asq_14', 'asq_15', 'asq_16', 'asq_17', 'asq_18', 'asq_19',
@@ -111,10 +120,9 @@ df = df.drop(columns=['asq_1', 'asq_2', 'asq_3', 'asq_4', 'asq_5', 'asq_6', 'asq
                       'asq_40',
                       'asq_41', 'asq_42', 'asq_43', 'asq_44', 'asq_45', 'asq_46', 'asq_47', 'asq_48', 'asq_49',
                       'asq_50'])
-
+#ASRS
 rule_1_columns = ['asrs_1', 'asrs_2', 'asrs_3']
 rule_2_columns = ['asrs_4', 'asrs_5', 'asrs_6']
-
 def calculate_asrs_score(row):
     score = 0
     for col in rule_1_columns:
@@ -124,10 +132,10 @@ def calculate_asrs_score(row):
         if row[col] in [3, 4]:
             score += 1
     return score
-
 df['asrs_score'] = df.apply(calculate_asrs_score,
-                            axis=1)  # la soglia per discriminare se hai l'adhd o no è da 4 in sù, 4 incluso
+                            axis=1)
 df = df.drop(columns=['asrs_1', 'asrs_2', 'asrs_3', 'asrs_4', 'asrs_5', 'asrs_6'])
+#SSBA
 df['ssba_alcohol_score'] = df[['ssba_alcohol_1', 'ssba_alcohol_2', 'ssba_alcohol_3', 'ssba_alcohol_4']].sum(axis=1)
 df.drop(['ssba_alcohol_1', 'ssba_alcohol_2', 'ssba_alcohol_3', 'ssba_alcohol_4'], axis=1, inplace=True)
 df['ssba_internet_score'] = df[['ssba_internet_1', 'ssba_internet_2', 'ssba_internet_3', 'ssba_internet_4']].sum(axis=1)
@@ -136,29 +144,30 @@ df['ssba_drug_score'] = df[['ssba_drug_1', 'ssba_drug_2', 'ssba_drug_3', 'ssba_d
 df.drop(['ssba_drug_1', 'ssba_drug_2', 'ssba_drug_3', 'ssba_drug_4'], axis=1, inplace=True)
 df['ssba_gambling_score'] = df[['ssba_gambling_1', 'ssba_gambling_2', 'ssba_gambling_3', 'ssba_gambling_4']].sum(axis=1)
 df.drop(['ssba_gambling_1', 'ssba_gambling_2', 'ssba_gambling_3', 'ssba_gambling_4'], axis=1,
-        inplace=True)  # su ognuna di queste addiction la soglia è 3 tranne che per il gambling che è 2
-#print(df.info())
+        inplace=True)
+# print(df.info())
 
-columns_to_select = ['age', 'gender', 'education', 'marital', 'income',
-                     'phq9_score', 'gad7_score', 'asq_score', 'asrs_score', 'ssba_alcohol_score','ssba_internet_score','ssba_drug_score', 'ssba_gambling_score']
-df_of_interest = df[columns_to_select]
-
-# Define rarity threshold and do a kind of outlier detection for categorical columns
+df_of_interest = df
 categorical = df_of_interest[['gender', 'marital', 'education']]
 numerical = df_of_interest.drop(columns=categorical.columns)
 print("Numerical columns:\n", numerical.columns.tolist())
 print("Categorical columns :\n", categorical.columns.tolist())
 
+# Checks the normality of numerical columns in the dataframe using the Shapiro-Wilk test.
+# It first tests the original distribution of each column and if the p-value is greater than or equal to 0.05,
+# the column is considered normally distributed. If not, the logarithmic transformation (log(x) + 1) is applied
+# and the normality is tested again. It then categorizes columns into normal and non-normal distributions,
+# printing the results for both the original and logarithmic versions of the variables.
 normal_columns = []
 non_normal_columns = []
 for col in numerical.columns:
     stat, p_value = stats.shapiro(
-        numerical[col].dropna())  # per piccole distribuzioni (la nostra è di 150) è meglio usare Shapiro_Wilk
+        numerical[col].dropna()) # For small distributions (ours is 150 (already dropped out)), it is better to use the Shapiro-Wilk test.
     if p_value >= 0.05:
         normal_columns.append((col, p_value, 'original'))
     else:
         non_normal_columns.append((col, p_value, 'original'))
-    numerical_log = np.log1p(numerical[col])  # Logaritmo naturale (ln(x)) + 1 per evitare log(0)
+    numerical_log = np.log1p(numerical[col])  # Natural logarithm (ln(x))+1 to avoid ln(0)
     stat_log, p_value_log = stats.shapiro(numerical_log.dropna())
     if p_value_log >= 0.05:
         normal_columns.append((col, p_value_log, 'log'))
@@ -180,7 +189,7 @@ if normal_columns or non_normal_columns:
 else:
     print("No numerical variables are present.")
 
-# plots
+# Plots.
 for col, p_value, var_type in normal_columns + non_normal_columns:
     if var_type == 'original':
         plt.figure(figsize=(12, 6))
@@ -206,16 +215,19 @@ sns.heatmap(numerical.corr(), annot=True, cmap="coolwarm", fmt=".2f")
 plt.title('Correlation Matrix Heatmap')
 plt.show()
 
-# Pairplots per le variabili numeriche per visualizzare distribuzioni e relazioni bivariate tra tutte le variabili numeriche.
+# Pairplots for numerical variables to visualize distributions and bivariate relationships between all numerical variables.
 pairplot_fig = sns.pairplot(numerical, diag_kind="kde", plot_kws={'alpha': 0.5})
 pairplot_fig.fig.suptitle('Pairplots for Numerical Variables', y=1.02, fontsize=16)
 plt.show()
 
+# Performs independence tests between pairs of numerical variables using Spearman's and Kendall's correlation tests.
+# It loops through all pairs of numerical columns and computes the Spearman and Kendall statistics and p-values.
+# The results are stored in 'independence_results', including the variables tested, the test used, the test statistics,
+# the p-values and whether the variables are considered independent (p-value >= 0.05).
 independence_results = []
-# Test per variabili numeriche vs numeriche
 for i, num_col1 in enumerate(numerical.columns):
     for num_col2 in numerical.columns[i + 1:]:
-        # Test di Spearman e Kendall
+        # Spearman and Kendall test
         spearman_stat, spearman_p = spearmanr(numerical[num_col1], numerical[num_col2])
         kendall_stat, kendall_p = kendalltau(numerical[num_col1], numerical[num_col2])
         independence_results.append({
@@ -235,7 +247,10 @@ for i, num_col1 in enumerate(numerical.columns):
             "Independent": kendall_p >= 0.05
         })
 
-# Test per variabili numeriche vs categoriali
+# Performs independence tests between categorical and numerical variables using the Kruskal-Wallis test.
+# It loops through all categorical columns and numerical columns, grouping the numerical values by the levels of the categorical variable.
+# The Kruskal-Wallis test is applied to these groups to check if the numerical variable differs across the categories.
+# The results, including the test statistics, p-values and whether the variables are independent (p-value >= 0.05), are stored in 'independence_results'.
 for cat_col in categorical.columns:
     for num_col in numerical.columns:
         # Kruskal-Wallis Test
@@ -250,10 +265,14 @@ for cat_col in categorical.columns:
             "Independent": kruskal_p >= 0.05
         })
 
-# Test per variabili categoriali vs categoriali
+# Performs independence tests between pairs of categorical variables using the Chi-Squared test.
+# It loops through all pairs of categorical columns, creating a contingency table for each pair.
+# The Chi-Squared test is applied to check if the categorical variables are independent.
+# The results, including the test statistics, p-values and whether the variables are independent (p-value >= 0.05),
+# are stored in 'independence_results'.
 for i, cat_col1 in enumerate(categorical.columns):
     for cat_col2 in categorical.columns[i + 1:]:
-        # Chi-squared Test. (Fisher qui lo posso fare solo 2x2)
+        # Chi-squared Test. (Fisher in Python can only be performed on 2x2 tables, so I use chi-squared as an approximation)
         contingency_table = pd.crosstab(df[cat_col1], df[cat_col2])
         chi2_stat, chi2_p, _, _ = chi2_contingency(contingency_table)
         independence_results.append({
@@ -264,14 +283,17 @@ for i, cat_col1 in enumerate(categorical.columns):
             "P-value": chi2_p,
             "Independent": chi2_p >= 0.05
         })
+
 independence_results_df = pd.DataFrame(independence_results)
 pd.set_option('display.max_columns', independence_results_df.shape[0] + 1)
 pd.set_option('display.max_rows', independence_results_df.shape[0] + 1)
 print(independence_results_df.drop("Statistic", axis=1))
 
-# QUINDI LE VARIABILI SONO TUTTE NON NORMALI-> Robust SCALER
-# qui prima di fare outlier detection riscalo i numerici.
-
+# Scales the numerical columns using the RobustScaler to reduce the influence of outliers.
+# It then generates a boxplot to visualize the distribution of the scaled numerical variables and detect potential outliers.
+# Afterward, it calculates the InterQuartile Range (IQR) for each column and identifies values outside the range of 1.5 times the IQR.
+# If outliers are detected, it stores the indices and columns of the outliers and prints them.
+# If no outliers are found, it confirms this based on the boxplot visualization.
 scaler = RobustScaler()
 numerical_scaled = scaler.fit_transform(numerical)
 numerical_scaled = pd.DataFrame(numerical_scaled, columns=numerical.columns)
@@ -297,31 +319,42 @@ if outlier_info:
 else:
     print("No outliers detected, as evinced by the boxplot.")
 
+# Creates a new dataframe 'df_postpp'(preprocessing) that contains both the scaled numerical and categorical variables of interest for our aims.
 columns_to_select = ['age', 'income', 'phq9_score', 'gad7_score']
 numerical_scaled = numerical_scaled[columns_to_select]
 df_postpp = pd.concat([numerical_scaled, categorical], axis=1)
 
-# Salvare come CSV
-df_postpp.to_csv("/Users/pietropante/Desktop/Files4Python/post_preprocessingRS_df.csv", index=False)  # 'index=False' evita di salvare gli indici
+# Saved as CSV
+df_postpp.to_csv("/Users/pietropante/Desktop/Python_assignment/Files4Python/post_preprocessingRS_df.csv",
+                 index=False) # 'index=False' prevents saving the index
 
-one_hot_encoder = OneHotEncoder(sparse_output=False, drop='first')# drop='first' (m-1) colonne per m categorie di una categorica
+# One-hot encoding in applied to the categorical columns using the OneHotEncoder.
+# The parameter 'drop="first"' ensures that for each categorical variable with m categories, only (m-1) columns are created, avoiding multicollinearity.
+# It then transforms the categorical data into a new DataFrame with the encoded variables.
+# Finally, it concatenates the scaled numerical columns and the one-hot encoded categorical columns into a new DataFrame 'df_encoded'.
+one_hot_encoder = OneHotEncoder(sparse_output=False,
+                                drop='first')
 categorical_encoded = one_hot_encoder.fit_transform(categorical).astype(int)
-categorical_encoded_df = pd.DataFrame(categorical_encoded, columns=one_hot_encoder.get_feature_names_out(categorical.columns))
+categorical_encoded_df = pd.DataFrame(categorical_encoded,
+                                      columns=one_hot_encoder.get_feature_names_out(categorical.columns))
 df_encoded = pd.concat([numerical_scaled, categorical_encoded_df.reset_index(drop=True)], axis=1)
 
 # PCA
+# Principal Component Analysis (PCA) is applied to the encoded dataset to reduce its dimensionality.
+# It first calculates the explained variance ratio for each principal component and the cumulative explained variance.
+# Then, it identifies the number of components required to explain at least 80% of the cumulative variance.
+# A new DataFrame 'df_pca_selected' is created, containing only the selected principal components that account for 80% of the variance.
 pca = PCA()
 df_pca = pca.fit_transform(df_encoded)
 explained_variance = pca.explained_variance_ratio_
 cumulative_explained_variance = np.cumsum(explained_variance)
 
-#voglio la varianza all'80%
-n_components_80 = np.argmax(cumulative_explained_variance >= 0.80) + 1  #+1 perché l'indice parte da 0
+n_components_80 = np.argmax(cumulative_explained_variance >= 0.80) + 1 # +1 because the index starts at 0
 print(f"# of components to have 80% of cumulative explained variance: {n_components_80}")
-print(f"Cumulative explained variance for {n_components_80} components: {cumulative_explained_variance[n_components_80 - 1]:.4f}")
+print(
+    f"Cumulative explained variance for {n_components_80} components: {cumulative_explained_variance[n_components_80 - 1]:.4f}")
 
-#creiamo un nuovo dataframe con solo le PC per avere l'80% della varianza
-df_pca_selected = pd.DataFrame(df_pca[:, :n_components_80], columns=[f'PC{i+1}' for i in range(n_components_80)])
+df_pca_selected = pd.DataFrame(df_pca[:, :n_components_80], columns=[f'PC{i + 1}' for i in range(n_components_80)])
 plt.figure(figsize=(8, 6))
 plt.plot(range(1, len(cumulative_explained_variance) + 1), cumulative_explained_variance * 100, color='b', marker='o')
 plt.axhline(y=80, color='r', linestyle='--', label="80% della varianza")
@@ -332,6 +365,11 @@ plt.legend()
 plt.show()
 
 # FAMD
+# Factor Analysis of Mixed Data (FAMD) is applied to the dataset, reducing the dimensionality of both numerical and categorical variables.
+# It calculates the eigenvalues, explained variance, and cumulative variance of the components.
+# The number of components required to explain at least 80% of the variance is determined.
+# A plot is created to visualize the cumulative explained variance and the 80% threshold.
+# The transformed data, containing the selected components that explain at least 80% of the variance, is stored in 'df_famd_80'.
 famd = prince.FAMD(n_components=df_postpp.shape[1], random_state=42)
 famd = famd.fit(df_postpp)
 
@@ -341,7 +379,8 @@ cumulative_variance = explained_variance.cumsum()
 num_components = (cumulative_variance <= 0.80).sum() + 1
 print(f"Number of components needed to explain at least 80% of the variance: {num_components}")
 plt.figure(figsize=(10, 6))
-plt.plot(range(1, len(cumulative_variance) + 1), cumulative_variance, color= 'b', marker='o', label='Cumulative Variance')
+plt.plot(range(1, len(cumulative_variance) + 1), cumulative_variance, color='b', marker='o',
+         label='Cumulative Variance')
 for i, var in enumerate(cumulative_variance):
     plt.text(i + 1, var, f"{var:.3f}", ha='center', va='bottom', fontsize=9)
 plt.axhline(y=0.80, color='r', linestyle='--', label='80% Explained Variance')
@@ -355,13 +394,13 @@ df_famd = famd.transform(df_postpp)
 
 df_famd_80 = pd.DataFrame(
     df_famd.iloc[:, :num_components].to_numpy(),
-    columns=[f"FAMD_{i+1}" for i in range(num_components)],
+    columns=[f"FAMD_{i + 1}" for i in range(num_components)],
     index=df_postpp.index
 )
 print("Reduced dataset with principal components explaining at least 80% of the variance:")
 print(df_famd_80.head())
 
-#Bar Plot
+# Bar Plot
 plt.figure(figsize=(10, 6))
 colors = ['skyblue' if i < num_components else 'gray' for i in range(len(explained_variance))]
 plt.bar(range(1, len(explained_variance) + 1), explained_variance, color=colors)
@@ -374,14 +413,13 @@ plt.title("Explained Variance per Principal Component")
 plt.legend()
 plt.show()
 
-# FAMD da R
-filepath = "/Users/pietropante/Desktop/Files4Python/famd_80_fromR.csv"
+# FAMD from R
+filepath = "/Users/pietropante/Desktop/Python_assignment/Files4Python/famd_80_fromR.csv"
 df_famd_80R = pd.read_csv(filepath)
 
-# PCAMIX da R
-filepath = "/Users/pietropante/Desktop/Files4Python/pcamix_fromR.csv"
+# PCAMIX from R
+filepath = "/Users/pietropante/Desktop/Python_assignment/Files4Python/pcamix_fromR.csv"
 df_pcamix_80R = pd.read_csv(filepath)
-
 
 df_transforms = {
     'PCA': df_pca_selected,
@@ -389,9 +427,9 @@ df_transforms = {
     'FAMD_R': df_famd_80R,
     'PCAMIX_R': df_pcamix_80R
 }
-
 for tag, df_scaled in df_transforms.items():
-
+    # Evaluates four different linkage methods ('ward', 'average', 'complete' and 'single') for hierarchical clustering.
+    # Uses the Silhouette Score to assess clustering quality and the Elbow Method to measure intra-cluster distances.
     def find_optimal_clusters(X, tag):
         linkage_methods = ['ward', 'average', 'complete', 'single']
         fig, axs = plt.subplots(1, 2, figsize=(14, 6))
@@ -404,11 +442,11 @@ for tag, df_scaled in df_transforms.items():
                 clustering.fit(X)
                 labels = clustering.labels_
 
-                # Calcolo del Silhouette Score
+                # Silhouette Score
                 silhouette_avg = silhouette_score(X, labels)
                 silhouette_avgs.append(silhouette_avg)
 
-                # Calcolo delle distorsioni per l'Elbow Method
+                # Elbow Method
                 cluster_centers = np.array([X[labels == i].mean(axis=0) for i in range(k)])
                 dist = sum(
                     np.sum(cdist(X[labels == i], cluster_centers[i].reshape(1, -1), 'euclidean')) for i in range(k))
@@ -433,7 +471,11 @@ for tag, df_scaled in df_transforms.items():
         plt.tight_layout()
         plt.show()
 
-    # Funzione per confrontare Agglomerative e K-Medoids e aggiungere i risultati al DataFrame
+    # This function compares the performance of Agglomerative Clustering (using the Ward linkage method)
+    # and K-Medoids clustering. The function evaluates the clustering quality
+    # using the Silhouette Score and the Elbow Method. Note: The Ward linkage method was chosen because the analysis of
+    # the plotted figures for the Silhouette Score and intra-cluster distances (inertia) shows that it provides
+    # the best trade-off between cluster cohesion and separation.
     def compare_clustering(X, tag, df):
         silhouette_avgs_ward = []
         silhouette_avgs_kmedoids = []
@@ -441,7 +483,7 @@ for tag, df_scaled in df_transforms.items():
         distortions_kmedoids = []
         ward_labels = []
         kmedoids_labels = []
-        #!!!!ward perche dall'analisi della figure che plotta silhouette score e inertia permette di raggiungere il miglior trade-off
+
         for k in range(2, 9):
             # Agglomerative clustering
             model_ward = AgglomerativeClustering(n_clusters=k, linkage='ward')
@@ -451,7 +493,7 @@ for tag, df_scaled in df_transforms.items():
             silhouette_avgs_ward.append(silhouette_avg_ward)
             ward_labels.append(labels_ward)
 
-            # Distortion per Agglomerative
+            # Distortion for Agglomerative
             cluster_centers = np.array([X[labels_ward == i].mean(axis=0) for i in range(k)])
             dist_ward = sum(
                 np.sum(cdist(X[labels_ward == i], cluster_centers[i].reshape(1, -1), 'euclidean')) for i in range(k))
@@ -465,7 +507,7 @@ for tag, df_scaled in df_transforms.items():
             silhouette_avgs_kmedoids.append(silhouette_avg_kmedoids)
             kmedoids_labels.append(labels_kmedoids)
 
-            # Distortion per K-Medoids
+            # Distortion for K-Medoids
             medoid_centers = np.array([X[labels_kmedoids == i].mean(axis=0) for i in range(k)])
             dist_kmedoids = sum(
                 np.sum(cdist(X[labels_kmedoids == i], medoid_centers[i].reshape(1, -1), 'euclidean')) for i in range(k))
@@ -484,11 +526,11 @@ for tag, df_scaled in df_transforms.items():
             best_ward_labels = ward_labels[1]
             best_kmedoids_labels = kmedoids_labels[1]
 
-            # Aggiungi i risultati al dataframe
+        # Add results to dataframe
         df[f'{tag}_Agglomerative_Cluster'] = best_ward_labels
         df[f'{tag}_KMedoids_Cluster'] = best_kmedoids_labels
 
-        # Plot dei risultati
+        # Plot results
         fig, axs = plt.subplots(1, 2, figsize=(14, 6))
         axs[0].plot(range(2, 9), silhouette_avgs_ward, marker='o', label='Agglomerative (Ward)', color='blue')
         for x, y in zip(range(2, 9), silhouette_avgs_ward):
@@ -524,39 +566,40 @@ for tag, df_scaled in df_transforms.items():
             return df, silhouette_avgs_kmedoids, distortions_kmedoids
 
     if tag == 'PCA':
-            dfPCA=df.copy()
-            find_optimal_clusters(df_scaled, tag)
-            dfPCA, silhPCA, distPCA=compare_clustering(df_scaled, tag, dfPCA)
+        dfPCA = df.copy()
+        find_optimal_clusters(df_scaled, tag)
+        dfPCA, silhPCA, distPCA = compare_clustering(df_scaled, tag, dfPCA)
     elif tag == 'FAMD':
-            dfFAMD=df.copy()
-            find_optimal_clusters(df_scaled, tag)
-            dfFAMD, silhFAMD, distFAMD=compare_clustering(df_scaled, tag, dfFAMD)
+        dfFAMD = df.copy()
+        find_optimal_clusters(df_scaled, tag)
+        dfFAMD, silhFAMD, distFAMD = compare_clustering(df_scaled, tag, dfFAMD)
     elif tag == 'FAMD_R':
-            dfFAMD_R=df.copy()
-            find_optimal_clusters(df_scaled, tag)
-            dfFAMD_R, silhFAMD_R, distFAMD_R=compare_clustering(df_scaled, tag, dfFAMD_R)
+        dfFAMD_R = df.copy()
+        find_optimal_clusters(df_scaled, tag)
+        dfFAMD_R, silhFAMD_R, distFAMD_R = compare_clustering(df_scaled, tag, dfFAMD_R)
     elif tag == 'PCAMIX_R':
-            dfPCAMIX_R=df.copy()
-            find_optimal_clusters(df_scaled, tag)
-            dfPCAMIX_R, silhPCAMIX_R, distPCAMIX_R=compare_clustering(df_scaled, tag, dfPCAMIX_R)
+        dfPCAMIX_R = df.copy()
+        find_optimal_clusters(df_scaled, tag)
+        dfPCAMIX_R, silhPCAMIX_R, distPCAMIX_R = compare_clustering(df_scaled, tag, dfPCAMIX_R)
 
-#PCA
-dfPCA.to_csv("/Users/pietropante/Desktop/Files4Python/PCA_perFisher.csv", index=False)  # 'index=False' evita di salvare gli indici
+# PCA
+dfPCA.to_csv("/Users/pietropante/Desktop/Python_assignment/Files4Python/PCA_perFisher.csv", index=False)
 
 dfPCA['PCA_Agglomerative_Cluster'] = dfPCA['PCA_Agglomerative_Cluster'].astype('object')
 dfPCA['PCA_KMedoids_Cluster'] = dfPCA['PCA_KMedoids_Cluster'].astype('object')
 
 num_unique_values_aggl = dfPCA['PCA_Agglomerative_Cluster'].nunique()
 num_unique_values_kmed = dfPCA['PCA_KMedoids_Cluster'].nunique()
-print(f"The number of clusters in PCA_Agglomerative_Cluster is {num_unique_values_aggl}, while in PCA_KMedoids_Cluster it is {num_unique_values_kmed}.")
+print(
+    f"The number of clusters in PCA_Agglomerative_Cluster is {num_unique_values_aggl}, while in PCA_KMedoids_Cluster it is {num_unique_values_kmed}.")
 
 numeric_vars = df.select_dtypes(include=['float64', 'int64']).columns
 
-# Funzione per l'analisi della normalità e Kruskal-Wallis
+# Function to perform normality tests, Kruskal-Wallis and Mann-Whitney U tests
 def perform_statistical_analysis(df, target_col):
-    print(f"\nAnalisi statistica per il clustering su '{target_col}':")
+    print(f"\nStatistical analysis for clustering '{target_col}':")
 
-    # Analisi della normalità
+    # Normality tests
     normality_results = []
     for var in numeric_vars:
         data = df[var]
@@ -567,17 +610,19 @@ def perform_statistical_analysis(df, target_col):
         else:
             print(f"Insufficient data or zero variance for Shapiro test on variable '{var}'")
 
+    # Store normality test results
     normality_results_df = pd.DataFrame(normality_results,
                                         columns=["Variable", "Shapiro_Statistic", "Shapiro_P", "KS_Statistic", "KS_P"])
 
+    # Identify variables that do not follow a normal distribution
     non_normal_vars_df = normality_results_df[
         (normality_results_df['Shapiro_P'] < 0.05) | (normality_results_df['KS_P'] < 0.05)]
 
-    print("\nVariabili che non seguono una distribuzione normale:")
+    print("\nVariables that do not follow a normal distribution:")
     print(non_normal_vars_df)
 
     if len(non_normal_vars_df) == len(numeric_vars):
-        print("\nTutte le variabili numeriche non sono distribuite normalmente.")
+        print("\nAll the numerical variables are not normally distributed.")
 
     # Kruskal-Wallis
     kruskal_results = []
@@ -586,20 +631,18 @@ def perform_statistical_analysis(df, target_col):
         groups = [data[data[target_col] == group][var].values for group in data[target_col].unique()]
         kruskal_stat, kruskal_p = kruskal(*groups)
         kruskal_results.append((var, kruskal_stat, kruskal_p))
-
+    # Store Kruskal-Wallis results
     kruskal_results_df = pd.DataFrame(
         kruskal_results,
         columns=["Variable", "Kruskal_Statistic", "Kruskal_P"]
     )
-
+    # Identify significant variables with p-value < 0.05
     significant_vars_df = kruskal_results_df[kruskal_results_df['Kruskal_P'] < 0.05]
-
-    print("\nVariabili significative dopo Kruskal-Wallis (p-value < 0.05):")
+    print("\nSignificant variables after Kruskal-Wallis (p-value < 0.05):")
     print(significant_vars_df)
 
-    # Test di Mann-Whitney per le variabili significative
+    # Mann-Whitney U Test for Pairwise Comparisons
     mannwhitney_results = []
-
     for var in significant_vars_df['Variable']:
         data = df[[var, target_col]]
         for (group1, group2) in combinations(data[target_col].unique(), 2):
@@ -607,35 +650,35 @@ def perform_statistical_analysis(df, target_col):
             group2_data = data[data[target_col] == group2][var].values
             mw_stat, mw_p = mannwhitneyu(group1_data, group2_data, alternative='two-sided')
             mannwhitney_results.append((var, group1, group2, mw_stat, mw_p))
-
     mannwhitney_results_df = pd.DataFrame(
         mannwhitney_results,
         columns=["Variable", "Group1", "Group2", "MW_Statistic", "MW_P"]
     )
-
-    # Correzione di Bonferroni
+    # Apply Bonferroni correction
     mannwhitney_results_df['Bonferroni_P'] = multipletests(mannwhitney_results_df['MW_P'], method='bonferroni')[1]
     significant_mw_results_df = mannwhitney_results_df[mannwhitney_results_df['Bonferroni_P'] < 0.05]
-
     if len(significant_mw_results_df) > 0:
-        print("\nRisultati significativi di Mann-Whitney (p-value Bonferroni corretto < 0.05):")
+        print("\nSignificant results of Mann-Whitney (Bonferroni corrected p-value < 0.05):")
         print(significant_mw_results_df[['Variable', 'Group1', 'Group2', 'MW_Statistic', 'MW_P', 'Bonferroni_P']])
     else:
-        print("\nNessun risultato significativo di Mann-Whitney dopo la correzione di Bonferroni.")
+        print("\nNo significant Mann-Whitney results after Bonferroni correction.")
 
-    # Selezioniamo le variabili significative da Kruskal-Wallis e Mann-Whitney
+    # Final Selection of Significant Variables
     significant_mw_vars = significant_mw_results_df['Variable'].unique()
     final_significant_vars = significant_vars_df[significant_vars_df['Variable'].isin(significant_mw_vars)]
 
     print("\nVariabili finali significative da mantenere:")
     print(final_significant_vars.iloc[:]['Variable'])
 
-# Ciclo per eseguire l'analisi per entrambi i metodi di clustering
+# Loop to perform analysis for both clustering methods
 for target in ['PCA_Agglomerative_Cluster', 'PCA_KMedoids_Cluster']:
     perform_statistical_analysis(dfPCA, target)
 
-# FISHER IN R
-'''> df <- read.csv("/Users/pietropante/Desktop/Files4Python/PCA_perFisher.csv", stringsAsFactors = FALSE)
+# FISHER ON R
+# This R code performs Fisher's exact tests to compare categorical variables across different clusters.
+# For each variable, pairwise comparisons between clusters are conducted, and a Bonferroni correction is applied
+# to account for multiple testing. The output is a DataFrame with corrected p-values and an indication of significance.
+'''> df <- read.csv("/Users/pietropante/Desktop/Python_assignment/Files4Python/PCA_perFisher.csv", stringsAsFactors = FALSE)
 > 
 > # Modifica il data frame per adattarsi ai vari metodi di clustering
 > df$gender <- as.factor(df$gender)
@@ -817,15 +860,22 @@ gender       gender 0.5102448776 Non significativa
 education education 0.0004997501     Significativa
 marital     marital 0.0004997501     Significativa
 '''
-# Meglio Agglomerative
+# Drop the 'PCA_KMedoids_Cluster' column as Agglomerative clustering is preferred
 dfPCA = dfPCA.drop(columns=['PCA_KMedoids_Cluster'])
 final_table = pd.DataFrame()
 
-# Calcoliamo il numero di persone per cluster
+# Calculate the number of people in each cluster
 cluster_counts = dfPCA['PCA_Agglomerative_Cluster'].value_counts()
 
-# Aggiungiamo i conteggi dei membri dei cluster nell'header
+# Add the cluster member counts to the header of the dataframe
 final_table.loc['Cluster Size', cluster_counts.index] = cluster_counts.values
+
+# Generates a summary table for the dataset grouped by clusters.
+# It calculates the following statistics for each variable in the dataframe:
+# - For numerical variables: median, min, and max values.
+# - For categorical variables: mode and its frequency (percentage) in each cluster.
+# Additionally, it includes the size of each cluster in the summary table.
+# The final table displays these statistics for each cluster, making it easier to analyze the characteristics of each cluster.
 for var in dfPCA.columns:
     if var != 'PCA_Agglomerative_Cluster':
         if dfPCA[var].dtype in ['float64', 'int64']:
@@ -839,7 +889,8 @@ for var in dfPCA.columns:
             ]
         else:
             mode_per_cluster = dfPCA.groupby('PCA_Agglomerative_Cluster')[var].agg(lambda x: x.mode()[0])
-            mode_freq_per_cluster = dfPCA.groupby('PCA_Agglomerative_Cluster')[var].agg(lambda x: (x == x.mode()[0]).sum())
+            mode_freq_per_cluster = dfPCA.groupby('PCA_Agglomerative_Cluster')[var].agg(
+                lambda x: (x == x.mode()[0]).sum())
 
             total_counts = dfPCA.groupby('PCA_Agglomerative_Cluster')[var].count()
             freq_per_cluster = mode_freq_per_cluster / total_counts * 100
@@ -852,23 +903,25 @@ print(
     "\nTabella con media (min-max) per variabili numeriche e moda con frequenza per variabili categoriche per ogni cluster:")
 print(final_table)
 
-#final_table.to_excel("Persona_Table.xlsx", sheet_name="PCA Cluster", index=True)
+# final_table.to_excel("Persona_Table.xlsx", sheet_name="PCA Cluster", index=True)
 
-#FAMD
-dfFAMD.to_csv("/Users/pietropante/Desktop/Files4Python/FAMD_perFisher.csv", index=False)
+# FAMD
+# Similarly to what was done previously.
+dfFAMD.to_csv("/Users/pietropante/Desktop/Python_assignment/Files4Python/FAMD_perFisher.csv", index=False)
 
 dfFAMD['FAMD_Agglomerative_Cluster'] = dfFAMD['FAMD_Agglomerative_Cluster'].astype('object')
 dfFAMD['FAMD_KMedoids_Cluster'] = dfFAMD['FAMD_KMedoids_Cluster'].astype('object')
 num_unique_values_aggl = dfFAMD['FAMD_Agglomerative_Cluster'].nunique()
 num_unique_values_kmed = dfFAMD['FAMD_KMedoids_Cluster'].nunique()
-print(f"The number of clusters in FAMD_Agglomerative_Cluster is {num_unique_values_aggl}, while in FAMD_KMedoids_Cluster it is {num_unique_values_kmed}.")
+print(
+    f"The number of clusters in FAMD_Agglomerative_Cluster is {num_unique_values_aggl}, while in FAMD_KMedoids_Cluster it is {num_unique_values_kmed}.")
 numeric_vars = df.select_dtypes(include=['float64', 'int64']).columns
 
-# Funzione per l'analisi della normalità e Kruskal-Wallis
+# Normality and Kruskal-Wallis tests
 def perform_statistical_analysis(df, target_col):
     print(f"\nAnalisi statistica per il clustering su '{target_col}':")
 
-    # Analisi della normalità
+    # Normality test
     normality_results = []
     for var in numeric_vars:
         data = df[var]
@@ -878,40 +931,32 @@ def perform_statistical_analysis(df, target_col):
             normality_results.append((var, shapiro_stat, shapiro_p, ks_stat, ks_p))
         else:
             print(f"Insufficient data or zero variance for Shapiro test on variable '{var}'")
-
     normality_results_df = pd.DataFrame(normality_results,
                                         columns=["Variable", "Shapiro_Statistic", "Shapiro_P", "KS_Statistic", "KS_P"])
-
     non_normal_vars_df = normality_results_df[
         (normality_results_df['Shapiro_P'] < 0.05) | (normality_results_df['KS_P'] < 0.05)]
-
-    print("\nVariabili che non seguono una distribuzione normale:")
+    print("\nVariables that do not follow a normal distribution:")
     print(non_normal_vars_df)
-
     if len(non_normal_vars_df) == len(numeric_vars):
-        print("\nTutte le variabili numeriche non sono distribuite normalmente.")
+        print("\nAll numeric variables are not distributed normally.")
 
-    # Kruskal-Wallis
+    # Kruskal-Wallis test
     kruskal_results = []
     for var in numeric_vars:
         data = df[[var, target_col]]
         groups = [data[data[target_col] == group][var].values for group in data[target_col].unique()]
         kruskal_stat, kruskal_p = kruskal(*groups)
         kruskal_results.append((var, kruskal_stat, kruskal_p))
-
     kruskal_results_df = pd.DataFrame(
         kruskal_results,
         columns=["Variable", "Kruskal_Statistic", "Kruskal_P"]
     )
-
     significant_vars_df = kruskal_results_df[kruskal_results_df['Kruskal_P'] < 0.05]
-
-    print("\nVariabili significative dopo Kruskal-Wallis (p-value < 0.05):")
+    print("\nVSignificant variables after Kruskal-Wallis (p-value < 0.05):")
     print(significant_vars_df)
 
-    # Test di Mann-Whitney per le variabili significative
+    # Test di Mann-Whitney for significant variables
     mannwhitney_results = []
-
     for var in significant_vars_df['Variable']:
         data = df[[var, target_col]]
         for (group1, group2) in combinations(data[target_col].unique(), 2):
@@ -919,35 +964,32 @@ def perform_statistical_analysis(df, target_col):
             group2_data = data[data[target_col] == group2][var].values
             mw_stat, mw_p = mannwhitneyu(group1_data, group2_data, alternative='two-sided')
             mannwhitney_results.append((var, group1, group2, mw_stat, mw_p))
-
     mannwhitney_results_df = pd.DataFrame(
         mannwhitney_results,
         columns=["Variable", "Group1", "Group2", "MW_Statistic", "MW_P"]
     )
 
-    # Correzione di Bonferroni
+    # Bonferroni correction
     mannwhitney_results_df['Bonferroni_P'] = multipletests(mannwhitney_results_df['MW_P'], method='bonferroni')[1]
     significant_mw_results_df = mannwhitney_results_df[mannwhitney_results_df['Bonferroni_P'] < 0.05]
-
     if len(significant_mw_results_df) > 0:
-        print("\nRisultati significativi di Mann-Whitney (p-value Bonferroni corretto < 0.05):")
+        print("\nSignificant Mann-Whitney achievements (p-value Bonferroni corrected < 0.05):")
         print(significant_mw_results_df[['Variable', 'Group1', 'Group2', 'MW_Statistic', 'MW_P', 'Bonferroni_P']])
     else:
-        print("\nNessun risultato significativo di Mann-Whitney dopo la correzione di Bonferroni.")
+        print("\nNo significant results from Mann-Whitney after Bonferroni's correction.")
 
-    # Selezioniamo le variabili significative da Kruskal-Wallis e Mann-Whitney
+    # Select the significant variables from Kruskal-Wallis and Mann-Whitney
     significant_mw_vars = significant_mw_results_df['Variable'].unique()
     final_significant_vars = significant_vars_df[significant_vars_df['Variable'].isin(significant_mw_vars)]
-
-    print("\nVariabili finali significative da mantenere:")
+    print("\nSignificant final variables to keep:")
     print(final_significant_vars.iloc[:]['Variable'])
 
-# Ciclo per eseguire l'analisi per entrambi i metodi di clustering
+# Loop to perform analysis for both clustering methods
 for target in ['FAMD_Agglomerative_Cluster', 'FAMD_KMedoids_Cluster']:
     perform_statistical_analysis(dfFAMD, target)
 
 # FISHER IN R
-'''> df <- read.csv("/Users/pietropante/Desktop/Files4Python/FAMD_perFisher.csv", stringsAsFactors = FALSE)
+'''> df <- read.csv("/Users/pietropante/Desktop/Python_assignment/Files4Python/FAMD_perFisher.csv", stringsAsFactors = FALSE)
 > 
 > # Modifica il data frame per adattarsi ai vari metodi di clustering
 > df$gender <- as.factor(df$gender)
@@ -1171,21 +1213,24 @@ gender       gender 0.0269865067 Significativa
 education education 0.0004997501 Significativa
 marital     marital 0.0004997501 Significativa
 '''
-# Meglio k-medoids
+# Drops the 'FAMD_Agglomerative_Cluster' column from the dataframe as k-medoids clustering is preferred.
 dfFAMD = dfFAMD.drop(columns=['FAMD_Agglomerative_Cluster'])
 final_table = pd.DataFrame()
 
-# Calcoliamo il numero di persone per cluster
+# Calculate the number of individuals in each cluster based on the 'FAMD_KMedoids_Cluster' column.
 cluster_counts = dfFAMD['FAMD_KMedoids_Cluster'].value_counts()
 
-# Aggiungiamo i conteggi dei membri dei cluster nell'header
+# Add cluster member counts in the header and calculate summary statistics (median, min, max) for numeric variables and mode with frequency for categorical variables for each cluster.
 final_table.loc['Cluster Size', cluster_counts.index] = cluster_counts.values
+
+# Loop through each column of the dataframe, calculate relevant statistics based on variable type (numeric or categorical) and add the results to the final table.
 for var in dfFAMD.columns:
     if var != 'FAMD_KMedoids_Cluster':
         if dfFAMD[var].dtype in ['float64', 'int64']:
             stats_per_cluster = dfFAMD.groupby('FAMD_KMedoids_Cluster')[var].agg(['median', 'min', 'max'])
             stats_per_cluster = stats_per_cluster.round()
 
+            # Add the statistics (median, min, max) for each cluster
             final_table.loc[var, stats_per_cluster.index] = [
                 f"{int(median)} ({int(min_val)} - {int(max_val)})"
                 for median, min_val, max_val in
@@ -1210,21 +1255,24 @@ print(final_table)
 with ExcelWriter("Persona_Table.xlsx", mode="a", engine="openpyxl") as writer:
     final_table.to_excel(writer, sheet_name="FAMD Cluster", index=True)
 '''
-#FAMD_R
-dfFAMD_R.to_csv("/Users/pietropante/Desktop/Files4Python/FAMD_R_perFisher.csv", index=False)
+# FAMD_R
+# Similarly to what was done previously.
+dfFAMD_R.to_csv("/Users/pietropante/Desktop/Python_assignment/Files4Python/FAMD_R_perFisher.csv", index=False)
 
 dfFAMD_R['FAMD_R_Agglomerative_Cluster'] = dfFAMD_R['FAMD_R_Agglomerative_Cluster'].astype('object')
 dfFAMD_R['FAMD_R_KMedoids_Cluster'] = dfFAMD_R['FAMD_R_KMedoids_Cluster'].astype('object')
 num_unique_values_aggl = dfFAMD_R['FAMD_R_Agglomerative_Cluster'].nunique()
 num_unique_values_kmed = dfFAMD_R['FAMD_R_KMedoids_Cluster'].nunique()
-print(f"The number of clusters in FAMD_R_Agglomerative_Cluster is {num_unique_values_aggl}, while in FAMD_R_KMedoids_Cluster it is {num_unique_values_kmed}.")
+print(
+    f"The number of clusters in FAMD_R_Agglomerative_Cluster is {num_unique_values_aggl}, while in FAMD_R_KMedoids_Cluster it is {num_unique_values_kmed}.")
 numeric_vars = df.select_dtypes(include=['float64', 'int64']).columns
 
-# Funzione per l'analisi della normalità e Kruskal-Wallis
+
+# Normality and Kruskal-Wallis tests
 def perform_statistical_analysis(df, target_col):
     print(f"\nAnalisi statistica per il clustering su '{target_col}':")
 
-    # Analisi della normalità
+    # Normality test
     normality_results = []
     for var in numeric_vars:
         data = df[var]
@@ -1247,7 +1295,7 @@ def perform_statistical_analysis(df, target_col):
     if len(non_normal_vars_df) == len(numeric_vars):
         print("\nTutte le variabili numeriche non sono distribuite normalmente.")
 
-    # Kruskal-Wallis
+    # Kruskal-Wallis test
     kruskal_results = []
     for var in numeric_vars:
         data = df[[var, target_col]]
@@ -1265,7 +1313,7 @@ def perform_statistical_analysis(df, target_col):
     print("\nVariabili significative dopo Kruskal-Wallis (p-value < 0.05):")
     print(significant_vars_df)
 
-    # Test di Mann-Whitney per le variabili significative
+    # Mann-Whitney test for significant variables
     mannwhitney_results = []
 
     for var in significant_vars_df['Variable']:
@@ -1281,7 +1329,7 @@ def perform_statistical_analysis(df, target_col):
         columns=["Variable", "Group1", "Group2", "MW_Statistic", "MW_P"]
     )
 
-    # Correzione di Bonferroni
+    # Bonferroni correction
     mannwhitney_results_df['Bonferroni_P'] = multipletests(mannwhitney_results_df['MW_P'], method='bonferroni')[1]
     significant_mw_results_df = mannwhitney_results_df[mannwhitney_results_df['Bonferroni_P'] < 0.05]
 
@@ -1292,20 +1340,21 @@ def perform_statistical_analysis(df, target_col):
     else:
         print("\nNessun risultato significativo di Mann-Whitney dopo la correzione di Bonferroni.")
 
-    # Selezioniamo le variabili significative da Kruskal-Wallis e Mann-Whitney
+    # Selection of significant variables from Kruskal-Wallis e Mann-Whitney
     significant_mw_vars = significant_mw_results_df['Variable'].unique()
     final_significant_vars = significant_vars_df[significant_vars_df['Variable'].isin(significant_mw_vars)]
 
     print("\nVariabili finali significative da mantenere:")
     print(final_significant_vars.iloc[:]['Variable'])
 
-# Ciclo per eseguire l'analisi per entrambi i metodi di clustering
+
+# Loop to perform analysis for both clustering methods
 for target in ['FAMD_R_Agglomerative_Cluster', 'FAMD_R_KMedoids_Cluster']:
     perform_statistical_analysis(dfFAMD_R, target)
 
 # FISHER IN R
 '''
-> df <- read.csv("/Users/pietropante/Desktop/Files4Python/FAMD_R_perFisher.csv", stringsAsFactors = FALSE)
+> df <- read.csv("/Users/pietropante/Desktop/Python_assignment/Files4Python/FAMD_R_perFisher.csv", stringsAsFactors = FALSE)
 > 
 > # Modifica il data frame per adattarsi ai vari metodi di clustering
 > df$gender <- as.factor(df$gender)
@@ -1506,16 +1555,17 @@ gender       gender 0.0004997501 Significativa
 education education 0.0004997501 Significativa
 marital     marital 0.0004997501 Significativa
 '''
-# Meglio Agglomerative
+# Switch to Agglomerative clustering since is preferred by dropping the K-Medoids clustering results.
 dfFAMD_R = dfFAMD_R.drop(columns=['FAMD_R_KMedoids_Cluster'])
 final_table = pd.DataFrame()
 
-# Calcoliamo il numero di persone per cluster
+# Calculate the number of individuals in each cluster.
 cluster_counts = dfFAMD_R['FAMD_R_Agglomerative_Cluster'].value_counts()
 
-# Aggiungiamo i conteggi dei membri dei cluster nell'header
+# Add cluster member counts in the header.
 final_table.loc['Cluster Size', cluster_counts.index] = cluster_counts.values
 
+# Loop through each column of the dataframe, calculate relevant statistics based on variable type (numeric or categorical) and add the results to the final table.
 for var in dfFAMD_R.columns:
     if var != 'FAMD_R_Agglomerative_Cluster':
         if dfFAMD_R[var].dtype in ['float64', 'int64']:
@@ -1529,7 +1579,8 @@ for var in dfFAMD_R.columns:
             ]
         else:
             mode_per_cluster = dfFAMD_R.groupby('FAMD_R_Agglomerative_Cluster')[var].agg(lambda x: x.mode()[0])
-            mode_freq_per_cluster = dfFAMD_R.groupby('FAMD_R_Agglomerative_Cluster')[var].agg(lambda x: (x == x.mode()[0]).sum())
+            mode_freq_per_cluster = dfFAMD_R.groupby('FAMD_R_Agglomerative_Cluster')[var].agg(
+                lambda x: (x == x.mode()[0]).sum())
 
             total_counts = dfFAMD_R.groupby('FAMD_R_Agglomerative_Cluster')[var].count()
             freq_per_cluster = mode_freq_per_cluster / total_counts * 100
@@ -1545,14 +1596,15 @@ print(final_table)
 '''with ExcelWriter("Persona_Table.xlsx", mode="a", engine="openpyxl") as writer:
     final_table.to_excel(writer, sheet_name="FAMD_R Cluster", index=True)
 '''
-#PCAMIX da R
-dfPCAMIX_R.to_csv("/Users/pietropante/Desktop/Files4Python/PCAMIX_R_perFisher.csv", index=False)
+# PCAMIX da R
+dfPCAMIX_R.to_csv("/Users/pietropante/Desktop/Python_assignment/Files4Python/PCAMIX_R_perFisher.csv", index=False)
 
 dfPCAMIX_R['PCAMIX_R_Agglomerative_Cluster'] = dfPCAMIX_R['PCAMIX_R_Agglomerative_Cluster'].astype('object')
 dfPCAMIX_R['PCAMIX_R_KMedoids_Cluster'] = dfPCAMIX_R['PCAMIX_R_KMedoids_Cluster'].astype('object')
 num_unique_values_aggl = dfPCAMIX_R['PCAMIX_R_Agglomerative_Cluster'].nunique()
 num_unique_values_kmed = dfPCAMIX_R['PCAMIX_R_KMedoids_Cluster'].nunique()
-print(f"The number of clusters in PCAMIX_R_Agglomerative_Cluster is {num_unique_values_aggl}, while in PCAMIX_R_KMedoids_Cluster it is {num_unique_values_kmed}.")
+print(
+    f"The number of clusters in PCAMIX_R_Agglomerative_Cluster is {num_unique_values_aggl}, while in PCAMIX_R_KMedoids_Cluster it is {num_unique_values_kmed}.")
 numeric_vars = df.select_dtypes(include=['float64', 'int64']).columns
 
 dfPCAMIX_R.to_csv("PCAMIX_R_perFisher.csv", index=False)
@@ -1562,11 +1614,11 @@ dfPCAMIX_R['PCAMIX_R_KMedoids_Cluster'] = dfPCAMIX_R['PCAMIX_R_KMedoids_Cluster'
 
 numeric_vars = df.select_dtypes(include=['float64', 'int64']).columns
 
-# Funzione per l'analisi della normalità e Kruskal-Wallis
+# Normality and Kruskal-Wallis tests
 def perform_statistical_analysis(df, target_col):
     print(f"\nAnalisi statistica per il clustering su '{target_col}':")
 
-    # Analisi della normalità
+    # Normality test
     normality_results = []
     for var in numeric_vars:
         data = df[var]
@@ -1589,7 +1641,7 @@ def perform_statistical_analysis(df, target_col):
     if len(non_normal_vars_df) == len(numeric_vars):
         print("\nTutte le variabili numeriche non sono distribuite normalmente.")
 
-    # Kruskal-Wallis
+    # Kruskal-Wallis test
     kruskal_results = []
     for var in numeric_vars:
         data = df[[var, target_col]]
@@ -1607,7 +1659,7 @@ def perform_statistical_analysis(df, target_col):
     print("\nVariabili significative dopo Kruskal-Wallis (p-value < 0.05):")
     print(significant_vars_df)
 
-    # Test di Mann-Whitney per le variabili significative
+    # Mann-Whitney test for significant variables
     mannwhitney_results = []
 
     for var in significant_vars_df['Variable']:
@@ -1623,7 +1675,7 @@ def perform_statistical_analysis(df, target_col):
         columns=["Variable", "Group1", "Group2", "MW_Statistic", "MW_P"]
     )
 
-    # Correzione di Bonferroni
+    # Bonferroni correction
     mannwhitney_results_df['Bonferroni_P'] = multipletests(mannwhitney_results_df['MW_P'], method='bonferroni')[1]
     significant_mw_results_df = mannwhitney_results_df[mannwhitney_results_df['Bonferroni_P'] < 0.05]
 
@@ -1633,20 +1685,20 @@ def perform_statistical_analysis(df, target_col):
     else:
         print("\nNessun risultato significativo di Mann-Whitney dopo la correzione di Bonferroni.")
 
-    # Selezioniamo le variabili significative da Kruskal-Wallis e Mann-Whitney
+    # Select significant variables from Kruskal-Wallis anf Mann-Whitney
     significant_mw_vars = significant_mw_results_df['Variable'].unique()
     final_significant_vars = significant_vars_df[significant_vars_df['Variable'].isin(significant_mw_vars)]
 
     print("\nVariabili finali significative da mantenere:")
     print(final_significant_vars.iloc[:]['Variable'])
 
-# Ciclo per eseguire l'analisi per entrambi i metodi di clustering
+# Loop to perform analysis for both clustering methods
 for target in ['PCAMIX_R_Agglomerative_Cluster', 'PCAMIX_R_KMedoids_Cluster']:
     perform_statistical_analysis(dfPCAMIX_R, target)
 
 # FISHER IN R
 '''
-> df <- read.csv("/Users/pietropante/Desktop/Files4python/PCAMIX_R_perFisher.csv", stringsAsFactors = FALSE)
+> df <- read.csv("/Users/pietropante/Desktop/Python_assignment/Files4python/PCAMIX_R_perFisher.csv", stringsAsFactors = FALSE)
 > 
 > # Modifica il data frame per adattarsi ai vari metodi di clustering
 > df$gender <- as.factor(df$gender)
@@ -1828,16 +1880,17 @@ gender       gender 0.0009995002 Significativa
 education education 0.0004997501 Significativa
 marital     marital 0.0004997501 Significativa
 '''
-# Meglio KMedoids
+# This script drops the agglomerative cluster column from the dataframe as k-medoids clustering is preferred.
 dfPCAMIX_R = dfPCAMIX_R.drop(columns=['PCAMIX_R_Agglomerative_Cluster'])
 final_table = pd.DataFrame()
 
-# Calcoliamo il numero di persone per cluster
+# Calculate the number of individuals in each cluster
 cluster_counts = dfPCAMIX_R['PCAMIX_R_KMedoids_Cluster'].value_counts()
 
-# Aggiungiamo i conteggi dei membri dei cluster nell'header
+# Add cluster member counts in the header
 final_table.loc['Cluster Size', cluster_counts.index] = cluster_counts.values
 
+# Loop through each column of the dataframe, calculate relevant statistics based on variable type (numeric or categorical), and add the results to the final table.
 for var in dfPCAMIX_R.columns:
     if var != 'PCAMIX_R_KMedoids_Cluster':
         if dfPCAMIX_R[var].dtype in ['float64', 'int64']:
@@ -1851,7 +1904,8 @@ for var in dfPCAMIX_R.columns:
             ]
         else:
             mode_per_cluster = dfPCAMIX_R.groupby('PCAMIX_R_KMedoids_Cluster')[var].agg(lambda x: x.mode()[0])
-            mode_freq_per_cluster = dfPCAMIX_R.groupby('PCAMIX_R_KMedoids_Cluster')[var].agg(lambda x: (x == x.mode()[0]).sum())
+            mode_freq_per_cluster = dfPCAMIX_R.groupby('PCAMIX_R_KMedoids_Cluster')[var].agg(
+                lambda x: (x == x.mode()[0]).sum())
 
             total_counts = dfPCAMIX_R.groupby('PCAMIX_R_KMedoids_Cluster')[var].count()
             freq_per_cluster = mode_freq_per_cluster / total_counts * 100
@@ -1867,6 +1921,8 @@ print(final_table)
 '''with ExcelWriter("Persona_Table.xlsx", mode="a", engine="openpyxl") as writer:
     final_table.to_excel(writer, sheet_name="PCAMIX_R Cluster", index=True)
 '''
+
+# General plot
 k_range = range(2, 9)
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 7))
 pastel_colors = {
@@ -1920,4 +1976,4 @@ fig.suptitle('Comparison of Silhouette and Distortion Scores for Different Clust
 plt.tight_layout()
 plt.show()
 
-#:)
+#the end
